@@ -1,4 +1,3 @@
-use std::iter::Peekable;
 use std::str::Chars;
 
 use ast::Expr::*;
@@ -19,21 +18,21 @@ pub enum ParseResult {
 // digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
 
 pub fn parse(s: &str) -> Result<Expr, String> {
-    match parse_expr(&mut s.chars().peekable()) {
+    match parse_expr(&mut s.chars()) {
         Success(e, None) => Ok(e),
         Success(_, Some(c)) => Err(format!("Unexpected character: {}", c)),
         Failure(m) => Err(m),
     }
 }
 
-fn parse_expr(remainder: &mut Peekable<Chars>) -> ParseResult {
+fn parse_expr(remainder: &mut Chars) -> ParseResult {
     match parse_term(remainder) {
         Success(lhs, next) => parse_operator(lhs, next, remainder, &vec!['+', '-']),
         Failure(m) => Failure(m),
     }
 }
 
-fn parse_term(remainder: &mut Peekable<Chars>) -> ParseResult {
+fn parse_term(remainder: &mut Chars) -> ParseResult {
     match parse_factor(remainder) {
         Success(lhs, next) => parse_operator(lhs, next, remainder, &vec!['*', '/']),
         Failure(m) => Failure(m),
@@ -43,7 +42,7 @@ fn parse_term(remainder: &mut Peekable<Chars>) -> ParseResult {
 fn parse_operator(
     lhs: Expr,
     op: Option<char>,
-    remainder: &mut Peekable<Chars>,
+    remainder: &mut Chars,
     operators: &Vec<char>,
 ) -> ParseResult {
     match op {
@@ -61,39 +60,41 @@ fn parse_operator(
     }
 }
 
-fn parse_factor(remainder: &mut Peekable<Chars>) -> ParseResult {
-    skip_whitespace(remainder);
-    match remainder.next() {
+fn parse_factor(remainder: &mut Chars) -> ParseResult {
+    match next_non_whitespace(remainder) {
         Some(c) if c.is_digit(10) => parse_number(c, remainder),
         Some('(') => parse_paren(remainder),
         c => Failure(format!("Expected factor, but found: {:?}", c)),
     }
 }
 
-fn parse_number(start: char, remainder: &mut Peekable<Chars>) -> ParseResult {
+fn parse_number(start: char, remainder: &mut Chars) -> ParseResult {
     let mut i = String::from(start.to_string());
-    while remainder.peek().is_some() && remainder.peek().unwrap().is_digit(10) {
-        i.push(remainder.next().unwrap());
+    let mut next = remainder.next();
+    while next.is_some() && next.unwrap().is_digit(10) {
+        i.push(next.unwrap());
+        next = remainder.next();
     }
-    skip_whitespace(remainder);
-    Success(Integer(i.parse().unwrap()), remainder.next())
+    if next.is_some() && next.unwrap().is_whitespace() {
+        next = next_non_whitespace(remainder);
+    }
+    Success(Integer(i.parse().unwrap()), next)
 }
 
-fn parse_paren(remainder: &mut Peekable<Chars>) -> ParseResult {
+fn parse_paren(remainder: &mut Chars) -> ParseResult {
     match parse_expr(remainder) {
-        Success(expr, Some(')')) => {
-            skip_whitespace(remainder);
-            Success(expr, remainder.next())
-        }
+        Success(expr, Some(')')) => Success(expr, next_non_whitespace(remainder)),
         Success(_, c) => Failure(format!("Expected ), but found {:?}", c)),
         Failure(m) => Failure(m),
     }
 }
 
-fn skip_whitespace(chars: &mut Peekable<Chars>) {
-    while chars.peek() == Some(&' ') {
-        chars.next();
+fn next_non_whitespace(remainder: &mut Chars) -> Option<char> {
+    let mut next = remainder.next();
+    while next.is_some() && next.unwrap().is_whitespace() {
+        next = remainder.next();
     }
+    next
 }
 
 #[cfg(test)]
@@ -112,9 +113,8 @@ mod tests {
 
     #[test]
     fn whitespace_skipped() {
-        let chars = &mut "   abc".chars().peekable();
-        skip_whitespace(chars);
-        assert_eq!(Some('a'), chars.next())
+        let chars = &mut "   abc".chars();
+        assert_eq!(Some('a'), next_non_whitespace(chars));
     }
 
     #[test]
