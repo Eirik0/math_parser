@@ -6,14 +6,15 @@ use ast::*;
 use self::ParseResult::*;
 
 #[derive(Debug, PartialEq)]
-pub enum ParseResult {
+enum ParseResult {
     Success(Expr, Option<char>),
     Failure(String),
 }
 
 // expr := term [{"+"|"-" sum}]
 // term := factor [{"*"|"/" factor}]
-// factor := number | "(" expr ")"
+// factor := exponent [{"^" exponent}]
+// exponent := number | "(" expr ")"
 // number := digit [{digit}]
 // digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
 
@@ -27,33 +28,33 @@ pub fn parse(s: &str) -> Result<Expr, String> {
 
 fn parse_expr(remainder: &mut Chars) -> ParseResult {
     match parse_term(remainder) {
-        Success(lhs, next) => parse_operator(lhs, next, remainder, &vec!['+', '-']),
+        Success(lhs, next) => parse_bop(lhs, next, remainder, &vec!['+', '-']),
         Failure(m) => Failure(m),
     }
 }
 
 fn parse_term(remainder: &mut Chars) -> ParseResult {
-    match parse_factor(remainder) {
-        Success(lhs, next) => parse_operator(lhs, next, remainder, &vec!['*', '/']),
+    match parse_exponent(remainder) {
+        Success(lhs, next) => parse_bop(lhs, next, remainder, &vec!['*', '/']),
         Failure(m) => Failure(m),
     }
 }
 
-fn parse_operator(
-    lhs: Expr,
-    op: Option<char>,
-    remainder: &mut Chars,
-    operators: &Vec<char>,
-) -> ParseResult {
+fn parse_exponent(remainder: &mut Chars) -> ParseResult {
+    match parse_factor(remainder) {
+        Success(lhs, next) => parse_bop(lhs, next, remainder, &vec!['^']),
+        Failure(m) => Failure(m),
+    }
+}
+
+fn parse_bop(lhs: Expr, op: Option<char>, remainder: &mut Chars, ops: &Vec<char>) -> ParseResult {
     match op {
         None => Success(lhs, None),
-        Some(op) if operators.contains(&op) => match parse_term(remainder) {
-            Success(rhs, next) => parse_operator(
-                Bop(Box::new(lhs), get_operator(op), Box::new(rhs)),
-                next,
-                remainder,
-                operators,
-            ),
+        Some(op) if ops.contains(&op) => match parse_term(remainder) {
+            Success(rhs, next) => {
+                let bop = Bop(box lhs, get_operator(op), box rhs);
+                parse_bop(bop, next, remainder, ops)
+            }
             Failure(m) => Failure(m),
         },
         next => Success(lhs, next),
@@ -103,65 +104,65 @@ mod tests {
 
     use ast::Operator::*;
 
-    fn integer(i: i64) -> Box<Expr> {
-        Box::new(Integer(i))
+    fn i(i: i64) -> Box<Expr> {
+        box Integer(i)
     }
 
-    fn bop(lhs: Box<Expr>, op: Operator, rhs: Box<Expr>) -> Box<Expr> {
-        Box::new(Bop(lhs, op, rhs))
+    fn b(lhs: Box<Expr>, op: Operator, rhs: Box<Expr>) -> Box<Expr> {
+        box Bop(lhs, op, rhs)
     }
 
     #[test]
-    fn whitespace_skipped() {
+    fn skip_whitespace() {
         let chars = &mut "   abc".chars();
         assert_eq!(Some('a'), next_non_whitespace(chars));
     }
 
     #[test]
-    fn integers_parsed() {
+    fn parse_integer() {
         assert_eq!(Ok(Integer(1)), parse("1"));
         assert_eq!(Ok(Integer(1)), parse(" 1"));
         assert_eq!(Ok(Integer(12)), parse("12"));
     }
 
     #[test]
-    fn add_parsed() {
-        assert_eq!(Ok(Bop(integer(1), Add, integer(2))), parse("1+2"));
-        assert_eq!(Ok(Bop(integer(1), Add, integer(2))), parse("  1  +  2"));
+    fn parse_add() {
+        assert_eq!(Ok(Bop(i(1), Add, i(2))), parse("1+2"));
+        assert_eq!(Ok(Bop(i(1), Add, i(2))), parse("  1  +  2"));
     }
 
     #[test]
-    fn add_mul_parsed() {
-        assert_eq!(
-            Ok(Bop(integer(1), Add, bop(integer(2), Mul, integer(3)))),
-            parse("1+2*3")
-        );
-        assert_eq!(
-            Ok(Bop(bop(integer(1), Mul, integer(2)), Add, integer(3))),
-            parse("1*2+3")
-        );
+    fn parse_add_mul() {
+        assert_eq!(Ok(Bop(i(1), Add, b(i(2), Mul, i(3)))), parse("1+2*3"));
+        assert_eq!(Ok(Bop(b(i(1), Mul, i(2)), Add, i(3))), parse("1*2+3"));
         assert_eq!(
             Ok(Bop(
-                bop(
-                    bop(integer(1), Mul, integer(2)),
-                    Add,
-                    bop(integer(3), Mul, integer(4))
-                ),
+                b(b(i(1), Mul, i(2)), Add, b(i(3), Mul, i(4))),
                 Add,
-                integer(5)
+                i(5)
             )),
             parse("1*2+3*4+5")
         );
     }
+    #[test]
+    fn parse_pow() {
+        assert_eq!(
+            Ok(Bop(i(1), Add, b(i(2), Mul, b(i(3), Exp, i(4))))),
+            parse("1+2*3^4")
+        );
+    }
 
     #[test]
-    fn parentheses_parsed() {
+    fn parse_parentheses() {
         assert_eq!(Ok(Integer(1)), parse("(1)"));
         assert_eq!(Ok(Integer(1)), parse("((1))"));
-        assert_eq!(Ok(Bop(integer(1), Add, integer(2))), parse("(1+2)"));
-        assert_eq!(
-            Ok(Bop(bop(integer(1), Add, integer(2)), Mul, integer(3))),
-            parse("(1+2)*3")
-        );
+        assert_eq!(Ok(Bop(i(1), Add, i(2))), parse("(1+2)"));
+        assert_eq!(Ok(Bop(b(i(1), Add, i(2)), Mul, i(3))), parse("(1+2)*3"));
+    }
+
+    #[test]
+    fn parse_order_correct() {
+        assert_eq!("((1+2)+3)", expr_to_string(parse("1+2+3").unwrap()));
+        assert_eq!("(1+(2*(3^4)))", expr_to_string(parse("1+2*3^4").unwrap()));
     }
 }
