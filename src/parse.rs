@@ -3,73 +3,58 @@ use std::str::Chars;
 use ast::Expr::*;
 use ast::*;
 
-use self::ParseResult::*;
+type ParseResult = Result<(Expr, Option<char>), String>;
 
-#[derive(Debug, PartialEq)]
-enum ParseResult {
-    Success(Expr, Option<char>),
-    Failure(String),
-}
-
-// expr := term [{"+"|"-" sum}]
-// term := neg [{"*"|"/" neg}]
-// neg = factor | "-" neg
-// factor := exponent [{"^" exponent}]
+// expr := expr ("+"|"-") term | term
+// term := term ("*"|"/") neg | neg
+// neg := "-" neg | factor
+// factor := exponent "^" factor | exponent
 // exponent := number | "(" expr ")"
-// number := digit [{digit}]
+// number := number digit | digit
 // digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
 
 pub fn parse(s: &str) -> Result<Expr, String> {
-    match parse_expr(&mut s.chars()) {
-        Success(e, None) => Ok(e),
-        Success(_, Some(c)) => Err(format!("Unexpected character: {}", c)),
-        Failure(m) => Err(m),
+    let (expr, next) = parse_expr(&mut s.chars())?;
+    match next {
+        None => Ok(expr),
+        Some(c) => Err(format!("Unexpected character: {}", c)),
     }
 }
 
 fn parse_expr(remainder: &mut Chars) -> ParseResult {
-    match parse_term(remainder) {
-        Success(lhs, next) => parse_bop(lhs, next, remainder, vec!['+', '-']),
-        Failure(m) => Failure(m),
-    }
+    let (lhs, next) = parse_term(remainder)?;
+    parse_bop(lhs, next, remainder, vec!['+', '-'])
 }
 
 
 fn parse_term(remainder: &mut Chars) -> ParseResult {
-    match parse_neg(remainder) {
-        Success(lhs, next) => parse_bop(lhs, next, remainder, vec!['*', '/']),
-        Failure(m) => Failure(m),
-    }
+    let (lhs, next) = parse_neg(remainder)?;
+    parse_bop(lhs, next, remainder, vec!['*', '/'])
 }
 
 fn parse_neg(remainder: &mut Chars) -> ParseResult {
     match next_non_whitespace(remainder) {
-        Some('-') => match parse_neg(remainder) {
-            Success(e, next) => Success(Neg(box e), next),
-            Failure(m) => Failure(m),
+        Some('-') => {
+            let (expr, next) = parse_neg(remainder)?;
+            Ok((Neg(box expr), next))
         },
         next => parse_factor(next, remainder),
     }
 }
 
 fn parse_factor(next: Option<char>, remainder: &mut Chars) -> ParseResult {
-    match parse_exponent(next, remainder) {
-        Success(lhs, next) => parse_bop(lhs, next, remainder, vec!['^']),
-        Failure(m) => Failure(m),
-    }
+    let (lhs, next) = parse_exponent(next, remainder)?;
+    parse_bop(lhs, next, remainder, vec!['^'])
 }
 
 fn parse_bop(lhs: Expr, op: Option<char>, remainder: &mut Chars, ops: Vec<char>) -> ParseResult {
     match op {
-        None => Success(lhs, None),
-        Some(op) if ops.contains(&op) => match parse_term(remainder) {
-            Success(rhs, next) => {
-                let bop = Bop(box lhs, get_operator(op), box rhs);
-                parse_bop(bop, next, remainder, ops)
-            }
-            Failure(m) => Failure(m),
+        Some(op) if ops.contains(&op) =>{
+            let (rhs, next) = parse_term(remainder)?;
+            let bop = Bop(box lhs, get_operator(op), box rhs);
+            parse_bop(bop, next, remainder, ops)
         },
-        next => Success(lhs, next),
+        next => Ok((lhs, next)),
     }
 }
 
@@ -77,7 +62,7 @@ fn parse_exponent(next: Option<char>, remainder: &mut Chars) -> ParseResult {
     match next {
         Some(c) if c.is_digit(10) => parse_number(c, remainder),
         Some('(') => parse_paren(remainder),
-        c => Failure(format!("Expected exponent, but found: {:?}", c)),
+        c => Err(format!("Expected exponent, but found: {:?}", c)),
     }
 }
 
@@ -91,14 +76,14 @@ fn parse_number(start: char, remainder: &mut Chars) -> ParseResult {
     if next.is_some() && next.unwrap().is_whitespace() {
         next = next_non_whitespace(remainder);
     }
-    Success(Integer(i.parse().unwrap()), next)
+    Ok((Integer(i.parse().unwrap()), next))
 }
 
 fn parse_paren(remainder: &mut Chars) -> ParseResult {
-    match parse_expr(remainder) {
-        Success(expr, Some(')')) => Success(expr, next_non_whitespace(remainder)),
-        Success(_, c) => Failure(format!("Expected ), but found {:?}", c)),
-        Failure(m) => Failure(m),
+    let (expr, next) = parse_expr(remainder)?;
+    match next {
+        Some(')') => Ok((expr, next_non_whitespace(remainder))),
+        c => Err(format!("Expected ), but found {:?}", c)),
     }
 }
 
