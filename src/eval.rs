@@ -15,6 +15,8 @@ pub fn reduce(e: Expr) -> Expr {
         },
         Bop(box Integer(i1), op, box l) => reduce(Bop(box Integer(i1), op, box reduce(l))),
         Bop(box r, op, box l) => reduce(Bop(box reduce(r), op, box l)),
+        Neg(box Integer(i)) => Integer(-i),
+        Neg(box e) => reduce(Neg(box reduce(e))),
     }
 }
 
@@ -42,6 +44,13 @@ mod tests {
         assert_eq!(Some(Integer(0)), parse_and_reduce("1-1"));
         assert_eq!(Some(Integer(6)), parse_and_reduce("2*3"));
         assert_eq!(Some(Integer(2)), parse_and_reduce("4/2"));
+    }
+
+    #[test]
+    fn reduce_negation() {
+        assert_eq!(Some(Integer(-1)), parse_and_reduce("-1"));
+        assert_eq!(Some(Integer(-2)), parse_and_reduce("-(1+1)"));
+        assert_eq!(Some(Integer(1)), parse_and_reduce("-(1+-2)"));
     }
 
     #[test]

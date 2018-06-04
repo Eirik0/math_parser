@@ -2,6 +2,7 @@
 pub enum Expr {
     Integer(i64),
     Bop(Box<Expr>, Operator, Box<Expr>),
+    Neg(Box<Expr>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -43,5 +44,6 @@ pub fn expr_to_string(e: Expr) -> String {
             get_operator_char(op),
             expr_to_string(l)
         ),
+        Expr::Neg(box e) => format!("(-{})", expr_to_string(e)),
     }
 }

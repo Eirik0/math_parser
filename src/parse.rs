@@ -12,7 +12,8 @@ enum ParseResult {
 }
 
 // expr := term [{"+"|"-" sum}]
-// term := factor [{"*"|"/" factor}]
+// term := neg [{"*"|"/" neg}]
+// neg = factor | "-" neg
 // factor := exponent [{"^" exponent}]
 // exponent := number | "(" expr ")"
 // number := digit [{digit}]
@@ -28,26 +29,37 @@ pub fn parse(s: &str) -> Result<Expr, String> {
 
 fn parse_expr(remainder: &mut Chars) -> ParseResult {
     match parse_term(remainder) {
-        Success(lhs, next) => parse_bop(lhs, next, remainder, &vec!['+', '-']),
+        Success(lhs, next) => parse_bop(lhs, next, remainder, vec!['+', '-']),
         Failure(m) => Failure(m),
     }
 }
+
 
 fn parse_term(remainder: &mut Chars) -> ParseResult {
-    match parse_exponent(remainder) {
-        Success(lhs, next) => parse_bop(lhs, next, remainder, &vec!['*', '/']),
+    match parse_neg(remainder) {
+        Success(lhs, next) => parse_bop(lhs, next, remainder, vec!['*', '/']),
         Failure(m) => Failure(m),
     }
 }
 
-fn parse_exponent(remainder: &mut Chars) -> ParseResult {
-    match parse_factor(remainder) {
-        Success(lhs, next) => parse_bop(lhs, next, remainder, &vec!['^']),
+fn parse_neg(remainder: &mut Chars) -> ParseResult {
+    match next_non_whitespace(remainder) {
+        Some('-') => match parse_neg(remainder) {
+            Success(e, next) => Success(Neg(box e), next),
+            Failure(m) => Failure(m),
+        },
+        next => parse_factor(next, remainder),
+    }
+}
+
+fn parse_factor(next: Option<char>, remainder: &mut Chars) -> ParseResult {
+    match parse_exponent(next, remainder) {
+        Success(lhs, next) => parse_bop(lhs, next, remainder, vec!['^']),
         Failure(m) => Failure(m),
     }
 }
 
-fn parse_bop(lhs: Expr, op: Option<char>, remainder: &mut Chars, ops: &Vec<char>) -> ParseResult {
+fn parse_bop(lhs: Expr, op: Option<char>, remainder: &mut Chars, ops: Vec<char>) -> ParseResult {
     match op {
         None => Success(lhs, None),
         Some(op) if ops.contains(&op) => match parse_term(remainder) {
@@ -61,11 +73,11 @@ fn parse_bop(lhs: Expr, op: Option<char>, remainder: &mut Chars, ops: &Vec<char>
     }
 }
 
-fn parse_factor(remainder: &mut Chars) -> ParseResult {
-    match next_non_whitespace(remainder) {
+fn parse_exponent(next: Option<char>, remainder: &mut Chars) -> ParseResult {
+    match next {
         Some(c) if c.is_digit(10) => parse_number(c, remainder),
         Some('(') => parse_paren(remainder),
-        c => Failure(format!("Expected factor, but found: {:?}", c)),
+        c => Failure(format!("Expected exponent, but found: {:?}", c)),
     }
 }
 
@@ -110,6 +122,10 @@ mod tests {
 
     fn b(lhs: Box<Expr>, op: Operator, rhs: Box<Expr>) -> Box<Expr> {
         box Bop(lhs, op, rhs)
+    }
+
+    fn n(e: Box<Expr>) -> Box<Expr> {
+        box Neg(e)
     }
 
     #[test]
@@ -158,6 +174,15 @@ mod tests {
         assert_eq!(Ok(Integer(1)), parse("((1))"));
         assert_eq!(Ok(Bop(i(1), Add, i(2))), parse("(1+2)"));
         assert_eq!(Ok(Bop(b(i(1), Add, i(2)), Mul, i(3))), parse("(1+2)*3"));
+    }
+
+    #[test]
+    fn parse_negation() {
+        assert_eq!(Ok(Neg(i(1))), parse("-1"));
+        assert_eq!(Ok(Neg(n(i(1)))), parse("--1"));
+        assert_eq!(Ok(Bop(n(i(1)), Add, i(2))), parse("-1+2"));
+        assert_eq!(Ok(Bop(n(i(1)), Mul, i(2))), parse("-1*2"));
+        assert_eq!(Ok(Neg(b(i(1), Exp, i(2)))), parse("-1^2"));
     }
 
     #[test]
