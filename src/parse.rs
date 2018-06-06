@@ -9,9 +9,10 @@ type ParseResult = Result<(Expr, Option<char>), String>;
 // term := term ("*"|"/") neg | neg
 // neg := "-" neg | factor
 // factor := exponent "^" neg | exponent
-// exponent := number | "(" expr ")"
+// exponent := number | variable | "(" expr ")"
 // number := number digit | digit
-// digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+// digit := "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+// variable := "a" | ... | "z" | "A" | ...
 
 pub fn parse(s: &str) -> Result<Expr, String> {
     let (expr, next) = parse_expr(&mut s.chars())?;
@@ -66,6 +67,7 @@ fn parse_bop(
 fn parse_exponent(next: Option<char>, remainder: &mut Chars) -> ParseResult {
     match next {
         Some(c) if c.is_digit(10) => parse_number(c, remainder),
+        Some(c) if c.is_alphabetic() => Ok((Var(c), next_non_whitespace(remainder))),
         Some('(') => parse_paren(remainder),
         c => Err(format!("Expected exponent, but found: {:?}", c)),
     }
@@ -110,6 +112,10 @@ mod tests {
         box Integer(i)
     }
 
+    fn v(c: char) -> Box<Expr> {
+        box Var(c)
+    }
+
     fn b(lhs: Box<Expr>, op: Operator, rhs: Box<Expr>) -> Box<Expr> {
         box Bop(lhs, op, rhs)
     }
@@ -129,6 +135,7 @@ mod tests {
         assert_eq!(Ok(Integer(1)), parse("1"));
         assert_eq!(Ok(Integer(1)), parse(" 1"));
         assert_eq!(Ok(Integer(12)), parse("12"));
+        assert_eq!(Ok(Integer(1234567890)), parse("1234567890"));
     }
 
     #[test]
@@ -190,5 +197,10 @@ mod tests {
         assert_eq!("((1+2)+3)", expr_to_string(parse("1+2+3").unwrap()));
         assert_eq!("(1^(2^3))", expr_to_string(parse("1^2^3").unwrap()));
         assert_eq!("(1+(2*(3^4)))", expr_to_string(parse("1+2*3^4").unwrap()));
+    }
+
+    #[test]
+    fn parse_variable() {
+        assert_eq!(Ok(Bop(v('x'), Add, v('y'))), parse("x+y"));
     }
 }

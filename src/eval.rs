@@ -4,6 +4,7 @@ use ast::*;
 pub fn eval(e: Expr) -> Result<Type, String> {
     match e {
         Expr::Integer(i) => Ok(Type::Integer(i)),
+        Expr::Var(_) => Err("not implemented".to_string()),
         Expr::Bop(box lhs, op, box rhs) => {
             let lhs = eval(lhs)?;
             let rhs = eval(rhs)?;

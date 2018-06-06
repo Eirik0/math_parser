@@ -1,6 +1,7 @@
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     Integer(i64),
+    Var(char),
     Bop(Box<Expr>, Operator, Box<Expr>),
     Neg(Box<Expr>),
 }
@@ -44,6 +45,7 @@ fn get_operator_char(o: Operator) -> char {
 pub fn expr_to_string(e: Expr) -> String {
     match e {
         Expr::Integer(i) => i.to_string(),
+        Expr::Var(c) => c.to_string(),
         Expr::Bop(box r, op, box l) => format!(
             "({}{}{})",
             expr_to_string(r),
