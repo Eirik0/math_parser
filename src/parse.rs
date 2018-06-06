@@ -8,7 +8,7 @@ type ParseResult = Result<(Expr, Option<char>), String>;
 // expr := expr ("+"|"-") term | term
 // term := term ("*"|"/") neg | neg
 // neg := "-" neg | factor
-// factor := exponent "^" factor | exponent
+// factor := exponent "^" neg | exponent
 // exponent := number | "(" expr ")"
 // number := number digit | digit
 // digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
@@ -23,13 +23,12 @@ pub fn parse(s: &str) -> Result<Expr, String> {
 
 fn parse_expr(remainder: &mut Chars) -> ParseResult {
     let (lhs, next) = parse_term(remainder)?;
-    parse_bop(lhs, next, remainder, vec!['+', '-'])
+    parse_bop(lhs, next, remainder, vec!['+', '-'], &parse_term)
 }
-
 
 fn parse_term(remainder: &mut Chars) -> ParseResult {
     let (lhs, next) = parse_neg(remainder)?;
-    parse_bop(lhs, next, remainder, vec!['*', '/'])
+    parse_bop(lhs, next, remainder, vec!['*', '/'], &parse_neg)
 }
 
 fn parse_neg(remainder: &mut Chars) -> ParseResult {
@@ -37,23 +36,29 @@ fn parse_neg(remainder: &mut Chars) -> ParseResult {
         Some('-') => {
             let (expr, next) = parse_neg(remainder)?;
             Ok((Neg(box expr), next))
-        },
+        }
         next => parse_factor(next, remainder),
     }
 }
 
 fn parse_factor(next: Option<char>, remainder: &mut Chars) -> ParseResult {
     let (lhs, next) = parse_exponent(next, remainder)?;
-    parse_bop(lhs, next, remainder, vec!['^'])
+    parse_bop(lhs, next, remainder, vec!['^'], &parse_neg)
 }
 
-fn parse_bop(lhs: Expr, op: Option<char>, remainder: &mut Chars, ops: Vec<char>) -> ParseResult {
+fn parse_bop(
+    lhs: Expr,
+    op: Option<char>,
+    remainder: &mut Chars,
+    ops: Vec<char>,
+    parse_next: &Fn(&mut Chars) -> ParseResult,
+) -> ParseResult {
     match op {
-        Some(op) if ops.contains(&op) =>{
-            let (rhs, next) = parse_term(remainder)?;
+        Some(op) if ops.contains(&op) => {
+            let (rhs, next) = parse_next(remainder)?;
             let bop = Bop(box lhs, get_operator(op), box rhs);
-            parse_bop(bop, next, remainder, ops)
-        },
+            parse_bop(bop, next, remainder, ops, parse_next)
+        }
         next => Ok((lhs, next)),
     }
 }
@@ -129,7 +134,13 @@ mod tests {
     #[test]
     fn parse_add() {
         assert_eq!(Ok(Bop(i(1), Add, i(2))), parse("1+2"));
+        assert_eq!(Ok(Bop(b(i(1), Add, i(2)), Add, i(3))), parse("1+2+3"));
         assert_eq!(Ok(Bop(i(1), Add, i(2))), parse("  1  +  2"));
+    }
+
+    #[test]
+    fn parse_divide() {
+        assert_eq!(Ok(Bop(b(i(1), Div, i(2)), Div, i(3))), parse("1/2/3"));
     }
 
     #[test]
@@ -150,6 +161,10 @@ mod tests {
         assert_eq!(
             Ok(Bop(i(1), Add, b(i(2), Mul, b(i(3), Exp, i(4))))),
             parse("1+2*3^4")
+        );
+        assert_eq!(
+            Ok(Neg(b(i(1), Exp, n(b(i(2), Exp, n(i(3))))))),
+            parse("-1^-2^-3")
         );
     }
 
@@ -173,6 +188,7 @@ mod tests {
     #[test]
     fn parse_order_correct() {
         assert_eq!("((1+2)+3)", expr_to_string(parse("1+2+3").unwrap()));
+        assert_eq!("(1^(2^3))", expr_to_string(parse("1^2^3").unwrap()));
         assert_eq!("(1+(2*(3^4)))", expr_to_string(parse("1+2*3^4").unwrap()));
     }
 }

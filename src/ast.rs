@@ -14,6 +14,12 @@ pub enum Operator {
     Exp,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Type {
+    Integer(i64),
+    Rational(i64, i64),
+}
+
 pub fn get_operator(c: char) -> Operator {
     match c {
         '+' => Operator::Add,
