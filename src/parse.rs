@@ -1,5 +1,4 @@
-use ast;
-use ast::{Expr, Operator};
+use ast::{Expr, Function, Operator};
 use lex;
 use lex::Token;
 
@@ -38,7 +37,7 @@ fn parse_exprs(lhs: Expr, next: Option<Token>, remainder: TokenIter) -> ParseRes
     match next {
         Some(Token::Operator(op)) if op == '+' || op == '-' => {
             let (rhs, next) = parse_term(remainder)?;
-            let bop = Expr::Bop(box lhs, ast::get_operator(op), box rhs);
+            let bop = Expr::Bop(box lhs, Operator::new(op), box rhs);
             parse_exprs(bop, next, remainder)
         }
         next => Ok((lhs, next)),
@@ -54,7 +53,7 @@ fn parse_terms(lhs: Expr, next: Option<Token>, remainder: TokenIter) -> ParseRes
     match next {
         Some(Token::Operator(op)) if op == '*' || op == '/' => {
             let (rhs, next) = parse_neg(remainder)?;
-            let bop = Expr::Bop(box lhs, ast::get_operator(op), box rhs);
+            let bop = Expr::Bop(box lhs, Operator::new(op), box rhs);
             parse_terms(bop, next, remainder)
         }
         Some(Token::Variable(_)) | Some(Token::Function(_)) | Some(Token::Operator('(')) => {
@@ -95,10 +94,10 @@ fn parse_exponent(next: Option<Token>, remainder: TokenIter) -> ParseResult {
             Err(_) => Err(format!("Unable to parse number: {}", num)),
         },
         Some(Token::Variable(x)) => Ok((Expr::Var(x), remainder.next())),
-        Some(Token::Function(fn_name)) => match remainder.next() {
+        Some(Token::Function(function_name)) => match remainder.next() {
             Some(Token::Operator('(')) => {
                 let (expr, next) = parse_paren(remainder)?;
-                Ok((Expr::Function(fn_name, box expr), next))
+                Ok((Expr::Function(Function::new(&function_name), box expr), next))
             }
             t => Err(format!("Expected ), but found {:?}", t)),
         } 
@@ -121,6 +120,7 @@ mod tests {
 
     use ast::Expr::*;
     use ast::Operator::*;
+    use ast::Function::*;
     use ast::*;
 
     fn i(i: i64) -> Box<Expr> {
@@ -221,6 +221,6 @@ mod tests {
 
     #[test]
     fn parse_function() {
-        assert_eq!(Ok(Function("sin".to_string(), v('x'))), parse("sin(x)"));
+        assert_eq!(Ok(Function(Sin, v('x'))), parse("sin(x)"));
     }
 }

@@ -107,7 +107,7 @@ fn next_variables(start: char, remainder: &mut Chars) -> (Vec<Token>, Option<cha
     (tokens, this_or_next(next, remainder))
 }
 
-fn next_function<'a>(chars: &'a String) -> Option<(&'a str, &'a str)> {
+fn next_function<'a>(chars: &'a str) -> Option<(&'a str, &'a str)> {
     for fn_name in FUNCTION_NAMES.iter() {
         if chars.starts_with(fn_name) {
             return Some(chars.split_at(fn_name.len()));
