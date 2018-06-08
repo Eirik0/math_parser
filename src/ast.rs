@@ -1,7 +1,8 @@
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     Integer(i64),
-    Var(char),
+    Var(String),
+    Function(String, Box<Expr>),
     Bop(Box<Expr>, Operator, Box<Expr>),
     Neg(Box<Expr>),
 }
@@ -46,6 +47,7 @@ pub fn expr_to_string(e: Expr) -> String {
     match e {
         Expr::Integer(i) => i.to_string(),
         Expr::Var(c) => c.to_string(),
+        Expr::Function(name, box e) => format!("{}({})", name, expr_to_string(e)),
         Expr::Bop(box r, op, box l) => format!(
             "({}{}{})",
             expr_to_string(r),

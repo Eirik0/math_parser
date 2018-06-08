@@ -4,7 +4,7 @@ use ast::*;
 pub fn eval(e: Expr) -> Result<Type, String> {
     match e {
         Expr::Integer(i) => Ok(Type::Integer(i)),
-        Expr::Var(_) => Err("not implemented".to_string()),
+        Expr::Var(_) => Err("not implemented".to_string()), // TODO
         Expr::Bop(box lhs, op, box rhs) => {
             let lhs = eval(lhs)?;
             let rhs = eval(rhs)?;
@@ -13,11 +13,12 @@ pub fn eval(e: Expr) -> Result<Type, String> {
                 Sub => Ok(subtract(lhs, rhs)),
                 Mul => Ok(multiply(lhs, rhs)),
                 Div => Ok(divide(lhs, rhs)),
-                _ => Err("not implemented".to_string()),
+                _ => Err("not implemented".to_string()), // TODO
                 //Exp => Ok(exponentiate(lhs, rhs)),
             }
         }
         Expr::Neg(box expr) => Ok(negate(eval(expr)?)),
+        _ => Err("not implemented".to_string()), // TODO
     }
 }
 
@@ -54,7 +55,7 @@ pub fn multiply(lhs: Type, rhs: Type) -> Type {
 
 pub fn divide(lhs: Type, rhs: Type) -> Type {
     match (lhs, rhs) {
-        (Type::Integer(i1), Type::Integer(i2)) => Type::Rational(i1, i2), // XXX divide by zero
+        (Type::Integer(i1), Type::Integer(i2)) => Type::Rational(i1, i2), // TODO divide by zero
         (Type::Integer(i), Type::Rational(n, d)) => Type::Rational(i * d, n),
         (Type::Rational(n, d), Type::Integer(i)) => Type::Rational(n, d * i),
         (Type::Rational(n1, d1), Type::Rational(n2, d2)) => Type::Rational(n1 * d2, d1 * n2),
@@ -87,7 +88,7 @@ mod tests {
         assert_eq!(Ok(Type::Integer(2)), parse_and_eval("1+1"));
         assert_eq!(Ok(Type::Integer(0)), parse_and_eval("1-1"));
         assert_eq!(Ok(Type::Integer(6)), parse_and_eval("2*3"));
-        //assert_eq!(Ok(Type::Integer(2)), parse_and_eval("4/2")); // XXX reduce
+        //assert_eq!(Ok(Type::Integer(2)), parse_and_eval("4/2")); // TODO reduce
     }
 
     #[test]
@@ -123,7 +124,7 @@ mod tests {
 
     #[test]
     fn eval_divide() {
-        //assert_eq!(Ok(Type::Integer(1)), parse_and_eval("1/1")); // XXX reduce
+        //assert_eq!(Ok(Type::Integer(1)), parse_and_eval("1/1")); // TODO reduce
         assert_eq!(Ok(Type::Rational(1, 6)), parse_and_eval("1/2/3"));
         assert_eq!(Ok(Type::Rational(2, 1)), parse_and_eval("1/(1/2)"));
         assert_eq!(Ok(Type::Rational(1, 4)), parse_and_eval("(1/2)/2"));
